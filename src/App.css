@@ -3,9 +3,24 @@
 }
 
 .conversation {
-  height: 90vh;
-  margin-bottom: -60px;
+  height: 85vh;
+  margin-bottom: 0vh;
   overflow: hidden;
   overflow-y: scroll; 
   text-align: center;
+}
+
+.input-form {
+  height: 15vh;
+}
+
+.contacts {
+  height: 100vh;
+  overflow: hidden;
+  overflow-y: scroll; 
+  text-align: center;
+}
+
+.message{
+  word-break:break-all;
 }

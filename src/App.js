@@ -181,7 +181,7 @@ function prepareMessageData(msg, email) {
     data['side'] = 1;
     from = fromEmail;
   }
-  console.log('COMPARE', to)
+  console.log('COMPARE')
   return [data, from, toEmail, to];
 }
 
@@ -196,7 +196,7 @@ function useGapi(setGapi, setGoogleAuth, setGClient, setIsLoggedIn, setName, set
     setImageUrl(profile.getImageUrl());
     // setContacts(['ASDAD', 'CCCCC']);
     // gapi.client.gmail.users.messages.list({userId: "me", q: "after:2021/10/12"}).then((response) => {console.log("ADASDASD")});
-  gapi.client.gmail.users.messages.list({userId: "me", q: "after:" + Date.parse("2021/10/12 00:00:00")/1000}).then(
+  gapi.client.gmail.users.messages.list({userId: "me", q: "after:" + (Date.parse("2021/10/01 00:00:00")/1000).toString()}).then(
     async (response) => {
       // await setEmail(profile.getEmail());
       var contacts = [];
@@ -205,8 +205,11 @@ function useGapi(setGapi, setGoogleAuth, setGClient, setIsLoggedIn, setName, set
 
       for(let i = 0; i < response.result.messages.length; i++)
       {
+        if(!(response.result.messages[i]['id'] in messageSet)) messageSet[response.result.messages[i]['id']] = 1;
         var msg = await gapi.client.gmail.users.messages.get({userId: 'me', id:response.result.messages[i]['id']});
         let [data, from, toEmail, to] = prepareMessageData(msg, email);
+        data['id'] = response.result.messages[i]['id'];
+        data['threadId'] = response.result.messages[i]['threadId'];
         if(!(from in conversations)) {
           contacts.push(to)
           conversations[from] = [data]
@@ -223,33 +226,44 @@ function useGapi(setGapi, setGoogleAuth, setGClient, setIsLoggedIn, setName, set
       setContacts(Object.keys(conversations))
       setConversations({...conversations});
       setMailTo(contacts);
-      mailTo_ = contacts;
+      mailTo_ = [...contacts];
       conv = {...conversations};
-      console.log('aaa', conversations[Object.keys(conversations)[0]])
     });
-    let now = Date.now()/1000;
+    let now = Math.round(Date.now()/1000);
     setlastUpdate(now);
     update = now;
+    console.log('BEFOR UPDATES', messageSet)
 
     setInterval(() => {
       console.log('updating111');
-      gapi.client.gmail.users.messages.list({userId: "me", q: "after:" + Date.parse("2021/10/12 00:00:00")/1000}).then(
+      gapi.client.gmail.users.messages.list({userId: "me", q: "after:" + (update - 60).toString()}).then(
     async (response) => {
       // await setEmail(profile.getEmail());
-      var contacts = [];
+      if(mailTo_.length == 0 || (Object.keys(conv) == 0)) {
+        return;
+      }
+      var contacts = [...mailTo_];
       var data = {};
-      let conversations = {};
+      let conversations = {...conv};
       console.log('updating222', response.result.resultSizeEstimate);
-      console.log(conv, update)
+      console.log("upd comv", conv, update)
       if (response.result.resultSizeEstimate == 0) {
         console.log('EMPTY update');
         return;
       }
-      let now = Date.now()/1000;
-        setlastUpdate(now);
-        update = now;
+        console.log('IDS SET', "after:" + (update - 60).toString())
+      console.log(response.result.messages)
+      console.log(messageSet)
       for(let i = 0; i < response.result.messages.length; i++)
       {
+        if(response.result.messages[i]['id'] in messageSet) {
+          console.log('OLD MESSAGE');
+          continue;
+        }
+        if(!(response.result.messages[i]['id'] in messageSet)) {
+          console.log("NEW MESSAGE", response.result.messages[i])
+          messageSet[response.result.messages[i]['id']] = 1;
+        }
         var msg = await gapi.client.gmail.users.messages.get({userId: 'me', id:response.result.messages[i]['id']});
         let [data, from, toEmail, to] = prepareMessageData(msg, email);
         if(!(from in conversations)) {
@@ -268,24 +282,15 @@ function useGapi(setGapi, setGoogleAuth, setGClient, setIsLoggedIn, setName, set
       setContacts(Object.keys(conversations))
       setConversations({...conversations});
       setMailTo(contacts);
-      mailTo_ = contacts
+      mailTo_ = [...contacts]
       conv = {...conversations};
-      console.log('updating', conversations[Object.keys(conversations)[0]])
+      console.log('updating final')
+      let now = Math.round(Date.now()/1000);
+      setlastUpdate(now);
+      update = now;
     });
-    }, 20000);
+    }, 10000);
 
-   gapi.client.gmail.users.messages.get({userId: 'me', id: '17c790b6196be048'}).then((msg) => {
-    let body = getBody(msg.result.payload, "text/html")
-  if (body === "") {
-    body = getBody(msg.result.payload, "text/plain");
-    body = body.replace(/(\r\n)+/g, '<br data-break="rn-1">').replace(/[\n\r]+/g, '<br data-break="nr">');
-  }
-
-  if (body !== "" && !isHTML(body)) {
-    body = body.replace(/(\r\n)+/g, '<div data-break="rn-1" style="margin-bottom:10px"></div>').replace(/[\n\r]+/g, '<br data-break="nr">');
-  }
-    console.log('body', body);
-   }, (reason) => {console.log('ERROR')}) 
   };
   
   const onFailure = () => {
@@ -319,7 +324,6 @@ function useGapi(setGapi, setGoogleAuth, setGClient, setIsLoggedIn, setName, set
 
     function initClient() {
    _gapi.client.init({
-        'apiKey': 'AIzaSyBr0dvCycZQPXpl9jRvQ0lt-VGWaSzgil4',
         // clientId and scope are optional if auth is not required.
         'discoveryDocs': ["https://www.googleapis.com/discovery/v1/apis/gmail/v1/rest"],
         'clientId': googleClientId,
@@ -353,6 +357,7 @@ var state = 0;
 var update = 0;
 var mailTo_ = [];
 var conv = {};
+var messageSet = {};
 
 var conversation = {
   'some@email.com': [{"side": 1, 'message': "Hello", 'date': '2021-09-10 00:00:00'}, {"side": 0, 'message': 'Hi', 'date': '2021-09-10 00:10:00'}]
@@ -404,13 +409,13 @@ function select_state(x) {
 function Message(msg) {
   if(msg.side == 1) {
   return <div className="d-flex flex-row">
-         <div className="col-md-5 border" dangerouslySetInnerHTML={{__html: DOMPurify.sanitize(msg.body)}}>
+         <div className="col-md-5 border message" dangerouslySetInnerHTML={{__html: DOMPurify.sanitize(msg.body)}}>
          </div>
          <div className="col-md-2 text-muted">{msg.date_str.substring(5, 5+8)}</div>
          </div>
        }
   return <div className="d-flex flex-row-reverse">
-         <div className="col-md-5 border" dangerouslySetInnerHTML={{__html: DOMPurify.sanitize(msg.body)}}>
+         <div className="col-md-5 border message" dangerouslySetInnerHTML={{__html: DOMPurify.sanitize(msg.body)}}>
          </div>
          <div className="col-md-2 text-muted">{msg.date_str.substring(5, 5+8)}</div>
          </div>
@@ -418,6 +423,7 @@ function Message(msg) {
 
 function Conversation(conversations, contacts_name, isLoggedIn) {
  let conv = []
+ // console.log("STRANGE CONV", conversations, contacts_name, state)
  if(isLoggedIn && (conversations != null)){
   for(let i = 0; i < conversations[contacts_name[state]].length;i++) {
     conv.push(Message(conversations[contacts_name[state]][i]))
@@ -479,7 +485,7 @@ function App() {
     })();
   };
   if (isLoggedIn && !(conversations == null)) {
-    console.log('LOGEDIN')
+    // console.log('LOGEDIN')
   }
   var names = ['some@email.com', 'other@email.com', 'my@email.com']
   // var contacts_ = Contacts(gapi, names, value, setValue)
@@ -490,7 +496,7 @@ function App() {
 {isLoggedIn &&
   <div className="container-fluid">
   <div className="row">
-    <div className="col-md-4 border vh-100  px-0">
+    <div className="col-md-4 border vh-100  px-0 pre-scrollable contacts">
 
       <h3>{email}</h3>
       <button className='btn-primary' onClick={logOut}>Log Out</button>
@@ -503,9 +509,9 @@ function App() {
       <div className="container-fluid pre-scrollable conversation">
       {Conversation(conversations, contacts_name, isLoggedIn)}
       </div>
-      <div class="navbar-fixed-bottom">
+      <div class="navbar-fixed-bottom input-form">
         <div class="input-group">
-          <textarea class="form-control" id="exampleFormControlTextarea1" rows="3" onChange={(event) => {setMessage(event.target.value); console.log('Texting', event.target.value)}}></textarea>
+          <textarea class="form-control" id="exampleFormControlTextarea1" rows="3" value={message} onChange={(event) => {setMessage(event.target.value); console.log('Texting', event.target.value)}}></textarea>
           <button onClick={() => {
                 const headers = {
                   To: mailTo[state],
