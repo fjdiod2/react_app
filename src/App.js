@@ -5,6 +5,17 @@ import { loadGoogleScript } from './GoogleLogin';
 import {useEffect, useState} from 'react';
 import DOMPurify from 'dompurify'
 
+
+function deentitize(text) {
+    text = text.replace(/&gt;/g, '>');
+    text = text.replace(/&lt;/g, '<');
+    text = text.replace(/&quot;/g, '"');
+    text = text.replace(/&apos;/g, "'");
+    text = text.replace(/&amp;/g, '&');
+    text = text.replace(/<div>/g, '\n<div>').replaceAll("<div><br /></div>", "").replace(/(\r\n|\r|\n){2,}/g, '$1\n');
+    return text;
+}
+
 function getGoogleMessageText(message) {
     let text = '';
 
@@ -26,6 +37,7 @@ function getGoogleMessageText(message) {
     if (encodedText) {
         const buff = new Buffer(encodedText, 'base64');
         text = buff.toString('ascii');
+        text = deentitize(text);
     }
 
     // NOTE: We need to remove history of email.
@@ -37,6 +49,7 @@ function getGoogleMessageText(message) {
     const toEmailWithArrows = `<${toEmail}>`;
     // NOTE: Check if email has history
     const isEmailWithHistory = (!!fromEmail && text.indexOf(fromEmailWithArrows) > -1) || (!!toEmail && text.indexOf(toEmailWithArrows) > -1);
+    // if(toEmail == "fjdiod@yandex.ru")console.log("condition", text.indexOf(fromEmailWithArrows), text.indexOf(toEmailWithArrows), findFirstSubstring(fromEmailWithArrows, toEmailWithArrows, text));
 
     if (isEmailWithHistory) {
        // NOTE: First history email with arrows
@@ -48,6 +61,7 @@ function getGoogleMessageText(message) {
        const fromRegExp = new RegExp(`^.*${historyEmailWithArrows}.*$`, 'mg');
        text = text.replace(fromRegExp, '');
     }
+    // if(fromEmail == "fjdiod@yandex.ru")console.log(fromEmail,toEmail, text);
 
     text = text.trim()
 
@@ -140,18 +154,18 @@ const isHTML = str => {
 
 
 function processBody(msg) {
-    let body = getBody(msg.result.payload, "text/html")
-  if (body === "") {
-    body = getBody(msg.result.payload, "text/plain");
-    body = body.replace(/(\r\n)+/g, '<br data-break="rn-1">').replace(/[\n\r]+/g, '<br data-break="nr">');
-  }
+  //   let body = getBody(msg.result.payload, "text/html")
+  // if (body === "") {
+  //   body = getBody(msg.result.payload, "text/plain");
+  //   body = body.replace(/(\r\n)+/g, '<br data-break="rn-1">').replace(/[\n\r]+/g, '<br data-break="nr">');
+  // }
 
-  if (body !== "" && !isHTML(body)) {
-    body = body.replace(/(\r\n)+/g, '<div data-break="rn-1" style="margin-bottom:10px"></div>').replace(/[\n\r]+/g, '<br data-break="nr">');
-  }
-  if(body.includes('HTML')) {
-    return body;
-  }
+  // if (body !== "" && !isHTML(body)) {
+  //   body = body.replace(/(\r\n)+/g, '<div data-break="rn-1" style="margin-bottom:10px"></div>').replace(/[\n\r]+/g, '<br data-break="nr">');
+  // }
+  // if(body.includes('HTML')) {
+  //   return body;
+  // }
   return getGoogleMessageText(msg.result);
 }
 
