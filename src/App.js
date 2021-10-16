@@ -210,18 +210,24 @@ function useGapi(setGapi, setGoogleAuth, setGClient, setIsLoggedIn, setName, set
         let [data, from, toEmail, to] = prepareMessageData(msg, email);
         data['id'] = response.result.messages[i]['id'];
         data['threadId'] = response.result.messages[i]['threadId'];
+        data['previous'] = -1
         if(!(from in conversations)) {
           contacts.push(to)
           conversations[from] = [data]
         } else {
           conversations[from].push(data);
         }
-        // console.log("CONVERS", from, toEmail);
       }
-      // console.log(conversations)
+      // sort conversation by date
       for(let i = 0; i < Object.keys(conversations).length; i++) {
         let conv = conversations[Object.keys(conversations)[i]]
         conversations[Object.keys(conversations)[i]] = conversations[Object.keys(conversations)[i]].sort((a, b) => {return a.date - b.date});
+        if(conversations[Object.keys(conversations)[i]].length <= 1) continue;
+        let previous = conversations[Object.keys(conversations)[i]][0]['threadId'];
+        for(let j = 1; j < conversations[Object.keys(conversations)[i]].length; j++) {
+          let threadId = conversations[Object.keys(conversations)[i]][j]['threadId'];
+          if(threadId == previous) conversations[Object.keys(conversations)[i]][j]['previous'] = j-1;
+        }
       }
       setContacts(Object.keys(conversations))
       setConversations({...conversations});
@@ -266,6 +272,9 @@ function useGapi(setGapi, setGoogleAuth, setGClient, setIsLoggedIn, setName, set
         }
         var msg = await gapi.client.gmail.users.messages.get({userId: 'me', id:response.result.messages[i]['id']});
         let [data, from, toEmail, to] = prepareMessageData(msg, email);
+        data['id'] = response.result.messages[i]['id'];
+        data['threadId'] = response.result.messages[i]['threadId'];
+        data['previous'] = -1
         if(!(from in conversations)) {
           contacts.push(to)
           conversations[from] = [data]
@@ -274,10 +283,16 @@ function useGapi(setGapi, setGoogleAuth, setGClient, setIsLoggedIn, setName, set
         }
         // console.log("CONVERS", from, toEmail);
       }
-      // console.log(conversations)
+      // sort conversations by date; todo: sort only the update
       for(let i = 0; i < Object.keys(conversations).length; i++) {
         let conv = conversations[Object.keys(conversations)[i]]
         conversations[Object.keys(conversations)[i]] = conversations[Object.keys(conversations)[i]].sort((a, b) => {return a.date - b.date});
+        if(conversations[Object.keys(conversations)[i]].length <= 1) continue;
+        let previous = conversations[Object.keys(conversations)[i]][0]['threadId'];
+        for(let j = 1; j < conversations[Object.keys(conversations)[i]].length; j++) {
+          let threadId = conversations[Object.keys(conversations)[i]][j]['threadId'];
+          if(threadId == previous) conversations[Object.keys(conversations)[i]][j]['previous'] = j-1;
+        }
       }
       setContacts(Object.keys(conversations))
       setConversations({...conversations});
@@ -409,15 +424,21 @@ function select_state(x) {
 function Message(msg) {
   if(msg.side == 1) {
   return <div className="d-flex flex-row">
-         <div className="col-md-5 border message" dangerouslySetInnerHTML={{__html: DOMPurify.sanitize(msg.body)}}>
-         </div>
-         <div className="col-md-2 text-muted">{msg.date_str.substring(5, 5+8)}</div>
+             <div className="col-md-5 border">
+               <div className="row">
+                  <div class="col-md-10 message" dangerouslySetInnerHTML={{__html: DOMPurify.sanitize(msg.body)}}></div>
+                  <div className="col-md-2 text-muted">{msg.date_str.substring(5, 5+8)}</div>
+               </div>
+            </div>
          </div>
        }
   return <div className="d-flex flex-row-reverse">
-         <div className="col-md-5 border message" dangerouslySetInnerHTML={{__html: DOMPurify.sanitize(msg.body)}}>
-         </div>
-         <div className="col-md-2 text-muted">{msg.date_str.substring(5, 5+8)}</div>
+             <div className="col-md-5 border">
+               <div className="row">
+                  <div class="col-md-10 message" dangerouslySetInnerHTML={{__html: DOMPurify.sanitize(msg.body)}}></div>
+                  <div className="col-md-2 text-muted">{msg.date_str.substring(5, 5+8)}</div>
+               </div>
+            </div>
          </div>
 }
 
