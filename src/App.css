@@ -24,3 +24,7 @@
 .message{
   word-break:break-all;
 }
+
+.time-date {
+    font-size: 70%;
+}
