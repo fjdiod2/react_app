@@ -2,7 +2,7 @@ import logo from './logo.svg';
 import './App.css';
 import 'bootstrap/dist/css/bootstrap.min.css';
 import { loadGoogleScript } from './GoogleLogin';
-import {useEffect, useState} from 'react';
+import {useEffect, useState, createRef} from 'react';
 import DOMPurify from 'dompurify'
 
 
@@ -36,7 +36,7 @@ function getGoogleMessageText(message) {
 
     if (encodedText) {
         const buff = new Buffer(encodedText, 'base64');
-        text = buff.toString('ascii');
+        text = buff.toString('UTF-8');
         text = deentitize(text);
     }
 
@@ -78,6 +78,7 @@ function getGoogleMessageEmailFromHeader(headerName, message) {
     }
 
     const headerValue = header.value; // John Doe <john.doe@example.com>
+    if(headerName == "to") console.log("fun", header.value);
     let email = "";
     if(headerValue.includes('<') && headerValue.includes('>')){
         email = headerValue.substring(
@@ -131,7 +132,8 @@ export const getBody = (message, mimeType) => {
     .replace(/-/g, "+")
     .replace(/_/g, "/")
     .replace(/\s/g, "");
-  return decodeURIComponent(escape(window.atob(encodedBody)));
+    console.log("body", encodedBody)
+  return (window.atob(encodedBody));
 };
 
 const getHTMLPart = (arr, mimeType) => {
@@ -171,8 +173,12 @@ function processBody(msg) {
 
 
 function prepareMessageData(msg, email) {
+  console.log("COMMMMMMMMMPPP", msg.result)
   const fromEmail = getGoogleMessageEmailFromHeader('from', msg.result);
   const toEmail = getGoogleMessageEmailFromHeader('to', msg.result);
+  const subject = getGoogleMessageEmailFromHeader('subject', msg.result);
+  const inrepTo = getGoogleMessageEmailFromHeader('in-reply-to', msg.result);
+  const msgId = getGoogleMessageEmailFromHeader('message-id', msg.result);
   let body = processBody(msg);
   let data = {body: body}
   let from = "";
@@ -195,8 +201,8 @@ function prepareMessageData(msg, email) {
     data['side'] = 1;
     from = fromEmail;
   }
-  console.log('COMPARE')
-  return [data, from, toEmail, to];
+  console.log('COMPARE', subject, to, inrepTo, msgId)
+  return [data, from, toEmail, to, subject, inrepTo, msgId];
 }
 
 
@@ -221,13 +227,17 @@ function useGapi(setGapi, setGoogleAuth, setGClient, setIsLoggedIn, setName, set
       {
         if(!(response.result.messages[i]['id'] in messageSet)) messageSet[response.result.messages[i]['id']] = 1;
         var msg = await gapi.client.gmail.users.messages.get({userId: 'me', id:response.result.messages[i]['id']});
-        let [data, from, toEmail, to] = prepareMessageData(msg, email);
+        let [data, from, toEmail, to, subject, inrepTo, msgId] = prepareMessageData(msg, email);
         data['id'] = response.result.messages[i]['id'];
         data['threadId'] = response.result.messages[i]['threadId'];
         data['previous'] = -1
+        data['subject'] = subject;
+        data['inrepTo'] = inrepTo;
+        data['msgId'] = msgId;
         if(!(from in conversations)) {
           contacts.push(to)
           conversations[from] = [data]
+          setContacts(Object.keys(conversations));
         } else {
           conversations[from].push(data);
         }
@@ -241,6 +251,7 @@ function useGapi(setGapi, setGoogleAuth, setGClient, setIsLoggedIn, setName, set
         for(let j = 1; j < conversations[Object.keys(conversations)[i]].length; j++) {
           let threadId = conversations[Object.keys(conversations)[i]][j]['threadId'];
           if(threadId == previous) conversations[Object.keys(conversations)[i]][j]['previous'] = j-1;
+          previous = threadId;
         }
       }
       setContacts(Object.keys(conversations))
@@ -285,10 +296,13 @@ function useGapi(setGapi, setGoogleAuth, setGClient, setIsLoggedIn, setName, set
           messageSet[response.result.messages[i]['id']] = 1;
         }
         var msg = await gapi.client.gmail.users.messages.get({userId: 'me', id:response.result.messages[i]['id']});
-        let [data, from, toEmail, to] = prepareMessageData(msg, email);
+        let [data, from, toEmail, to, subject, inrepTo, msgId] = prepareMessageData(msg, email);
         data['id'] = response.result.messages[i]['id'];
         data['threadId'] = response.result.messages[i]['threadId'];
-        data['previous'] = -1
+        data['previous'] = -1;
+        data['subject'] = subject;
+        data['inrepTo'] = inrepTo;
+        data['msgId'] = msgId;
         if(!(from in conversations)) {
           contacts.push(to)
           conversations[from] = [data]
@@ -306,6 +320,7 @@ function useGapi(setGapi, setGoogleAuth, setGClient, setIsLoggedIn, setName, set
         for(let j = 1; j < conversations[Object.keys(conversations)[i]].length; j++) {
           let threadId = conversations[Object.keys(conversations)[i]][j]['threadId'];
           if(threadId == previous) conversations[Object.keys(conversations)[i]][j]['previous'] = j-1;
+          previous = threadId;
         }
       }
       setContacts(Object.keys(conversations))
@@ -383,6 +398,7 @@ function useGapi(setGapi, setGoogleAuth, setGClient, setIsLoggedIn, setName, set
 }
 
 var state = 0;
+var chosenMsg = -1;
 var update = 0;
 var mailTo_ = [];
 var conv = {};
@@ -392,17 +408,17 @@ var conversation = {
   'some@email.com': [{"side": 1, 'message': "Hello", 'date': '2021-09-10 00:00:00'}, {"side": 0, 'message': 'Hi', 'date': '2021-09-10 00:10:00'}]
 }
 
-function Contact(i, name, isChosen, setter) {
+function Contact(i, name, isChosen, setter, setChosenMsg) {
   var cls = "border"
   if(isChosen) cls = "border bg-primary";
-  return <div class={cls} onClick={function() {state=i; setter(i); }}>
+  return <div class={cls} onClick={function() {state=i; setter(i); chosenMsg=-1; setChosenMsg(-1);}}>
               <p>{name}</p>
          </div>
 }
 
 
 
-function Contacts(names, value, setValue, isLoggedIn) {
+function Contacts(names, value, setValue, isLoggedIn, setChosenMsg) {
 
 //   useEffect(() => {
 //     console.log('EFFECT in cont')
@@ -414,7 +430,7 @@ function Contacts(names, value, setValue, isLoggedIn) {
   // const [value, setValue] = useState(1);
   var cls = "border bg-primary"
   for(let i = 0; i < names.length; i++) {
-    rows.push(Contact(i, names[i], i == value, setValue)
+    rows.push(Contact(i, names[i], i == value, setValue, setChosenMsg)
              )
   }
   return rows
@@ -435,34 +451,71 @@ function select_state(x) {
 }
 
 
-function Message(msg) {
+function Message(msg, convers, ref_msg, ref_p, msgNum, setChosenMsg) {
+  function onMsgClick() {
+    console.log("CLICKING MSG", msgNum, chosenMsg);
+    if(chosenMsg == msgNum) {
+      chosenMsg = -1;
+      setChosenMsg(-1);
+    } else {
+      chosenMsg = msgNum;
+      setChosenMsg(msgNum);
+    }
+    console.log("CLICKING MSG after", msgNum, chosenMsg);
+  }
+  let cls = "col-md-8 message";
+  if(msgNum == 0) {console.log("CLICKING MSG outer", msgNum, chosenMsg)};
+  if(msgNum == chosenMsg) cls = "col-md-8 message bg-primary";
   if(msg.side == 1) {
   return <div className="d-flex flex-row">
              <div className="col-md-5 border">
+             {
+              msg.previous != -1 &&
+              <div class="row">
+                <div class="col-md-1"></div>
+                <div class="col-md-5 text-truncate border-start"  onClick={() => {ref_p.current.scrollIntoView({ behavior: 'smooth' });}} dangerouslySetInnerHTML={{__html: DOMPurify.sanitize(convers[msg.previous].body)}}></div>
+              </div>
+            }
                <div className="row">
-                  <div class="col-md-10 message" dangerouslySetInnerHTML={{__html: DOMPurify.sanitize(msg.body)}}></div>
-                  <div className="col-md-2 text-muted">{msg.date_str.substring(5, 5+8)}</div>
+                  <div class={msgNum == chosenMsg ? "col-md-8 message bg-primary": "col-md-8 message"} ref={ref_msg} onClick={onMsgClick} dangerouslySetInnerHTML={{__html: DOMPurify.sanitize(msg.body)}}></div>
+                  <div className="col-md-2 text-muted time-date">{msg.date_str.substring(5, 5+8)}</div>
                </div>
             </div>
          </div>
        }
   return <div className="d-flex flex-row-reverse">
              <div className="col-md-5 border">
+             {
+              msg.previous != -1 &&
+              <div class="row">
+                <div class="col-md-1"></div>
+                <div class="col-md-5 text-truncate border-start" onClick={() => {ref_p.current.scrollIntoView({ behavior: 'smooth' }); console.log("SCROLLING")}}  dangerouslySetInnerHTML={{__html: DOMPurify.sanitize(convers[msg.previous].body)}}></div>
+              </div>
+            }
                <div className="row">
-                  <div class="col-md-10 message" dangerouslySetInnerHTML={{__html: DOMPurify.sanitize(msg.body)}}></div>
-                  <div className="col-md-2 text-muted">{msg.date_str.substring(5, 5+8)}</div>
+                  <div class={msgNum == chosenMsg ? "col-md-8 message bg-primary": "col-md-8 message"} ref={ref_msg} onClick={onMsgClick} dangerouslySetInnerHTML={{__html: DOMPurify.sanitize(msg.body)}}></div>
+                  <div className="col-md-2 text-muted time-date">{msg.date_str.substring(5, 5+8)}</div>
                </div>
             </div>
          </div>
 }
 
-function Conversation(conversations, contacts_name, isLoggedIn) {
+function Conversation(conversations, contacts_name, isLoggedIn, setChosenMsg) {
  let conv = []
+ let refs = []
  // console.log("STRANGE CONV", conversations, contacts_name, state)
- if(isLoggedIn && (conversations != null)){
+ if(isLoggedIn && (conversations != null) && (conversations[contacts_name[state]] != null))
+ {
+  console.log(state, contacts_name[state], contacts_name)
   for(let i = 0; i < conversations[contacts_name[state]].length;i++) {
-    conv.push(Message(conversations[contacts_name[state]][i]))
-  }}
+    refs.push(createRef())
+    if(conversations[contacts_name[state]][i].previous != -1){
+        conv.push(Message(conversations[contacts_name[state]][i], conversations[contacts_name[state]], refs[i], refs[conversations[contacts_name[state]][i].previous], i, setChosenMsg));
+      } else {
+        conv.push(Message(conversations[contacts_name[state]][i], conversations[contacts_name[state]], refs[i], -1, i, setChosenMsg));
+      }
+  }
+}
  return conv;
 }
 
@@ -490,6 +543,8 @@ function sendMessage(gapi, headers, body) {
 
 function App() {
   const [value, setValue] = useState(state);
+  const [newContact, setNewContact] = useState("");
+  const [chosenMsg, setChosenMsg] = useState(-1);
   const [gapi, setGapi] = useState();
   const [contacts_name, setContacts] = useState([]);
   const [googleAuth, setGoogleAuth] = useState();
@@ -535,23 +590,54 @@ function App() {
 
       <h3>{email}</h3>
       <button className='btn-primary' onClick={logOut}>Log Out</button>
-      {Contacts(contacts_name, value, setValue)}
+      <div class="input-group mb-3">
+        <input type="text" class="form-control" placeholder="New contact" aria-label="New contact" aria-describedby="basic-addon2"  value={newContact} onChange={(event) => {setNewContact(event.target.value)}} />
+        <div class="input-group-append">
+          <button class="btn btn-outline-secondary" type="button" onClick={() => {
+            setContacts([newContact, ...contacts_name]);
+            let convers = {...conversations};
+            convers[newContact] = [];
+            // state = 0;
+            setConversations(convers);
+            mailTo_ = [newContact, ...mailTo]
+            conv = {...convers};
+            setMailTo([newContact, ...mailTo]);
+          }
+          }>+</button>
+        </div>
+      </div>
+      {Contacts(contacts_name, value, setValue, isLoggedIn, setChosenMsg)}
       {/*<button className='btn-primary' onClick={logOut}>Log Out</button>*/}
     </div>
     <div className="col-md-8 border vh-100 px-0">
       <h3>{contacts_name[state]}</h3>
       
       <div className="container-fluid pre-scrollable conversation">
-      {Conversation(conversations, contacts_name, isLoggedIn)}
+      {Conversation(conversations, contacts_name, isLoggedIn, setChosenMsg)}
       </div>
       <div class="navbar-fixed-bottom input-form">
         <div class="input-group">
           <textarea class="form-control" id="exampleFormControlTextarea1" rows="3" value={message} onChange={(event) => {setMessage(event.target.value); console.log('Texting', event.target.value)}}></textarea>
           <button onClick={() => {
-                const headers = {
+            let headers = {};
+            console.log("SEND", chosenMsg)
+            if(chosenMsg != -1) {
+                 console.log("SENDING WITH CHOSEN");
+                 console.log(conv[contacts_name[state]][chosenMsg].subject, conv[contacts_name[state]][chosenMsg].inrepTo, conv[contacts_name[state]][chosenMsg].msgId);
+                 headers = {
+                  To: mailTo[state],
+                  Subject: conv[contacts_name[state]][chosenMsg].subject,
+                  "In-Reply-To": conv[contacts_name[state]][chosenMsg].msgId,
+                  References: conv[contacts_name[state]][chosenMsg].msgId,
+                  threadId: conv[contacts_name[state]][chosenMsg].threadId
+                };
+                console.log(headers);
+              } else {
+                 headers = {
                   To: mailTo[state],
                   Subject: "Subject"
                 };
+              }
             sendMessage(gapi, headers, message).then((resp) => {console.log('sucsess', resp)}, (reason) => {console.log('ERROR', reason)});
             setMessage("");
             console.log('Sending', headers)
