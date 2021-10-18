@@ -78,7 +78,6 @@ function getGoogleMessageEmailFromHeader(headerName, message) {
     }
 
     const headerValue = header.value; // John Doe <john.doe@example.com>
-    if(headerName == "to") console.log("fun", header.value);
     let email = "";
     if(headerValue.includes('<') && headerValue.includes('>')){
         email = headerValue.substring(
@@ -206,7 +205,7 @@ function prepareMessageData(msg, email) {
 }
 
 
-function useGapi(setGapi, setGoogleAuth, setGClient, setIsLoggedIn, setName, setEmail, setImageUrl, setContacts, setConversations, setMailTo, setlastUpdate) {
+function useGapi(setGapi, setGoogleAuth, setGClient, setIsLoggedIn, setName, setEmail, setImageUrl, setContacts, setConversations, setMailTo, setlastUpdate, setProgress) {
   const onSuccess = (googleUser, gapi) => { // (Ref. 7)
     setIsLoggedIn(true);
     const profile = googleUser.getBasicProfile();
@@ -222,7 +221,7 @@ function useGapi(setGapi, setGoogleAuth, setGClient, setIsLoggedIn, setName, set
       var contacts = [];
       var data = {};
       let conversations = {};
-
+      let total = response.result.messages.length;
       for(let i = 0; i < response.result.messages.length; i++)
       {
         if(!(response.result.messages[i]['id'] in messageSet)) messageSet[response.result.messages[i]['id']] = 1;
@@ -241,7 +240,10 @@ function useGapi(setGapi, setGoogleAuth, setGClient, setIsLoggedIn, setName, set
         } else {
           conversations[from].push(data);
         }
+        console.log('progress', i/total*100)
+        setProgress(i/total*100);
       }
+
       // sort conversation by date
       for(let i = 0; i < Object.keys(conversations).length; i++) {
         let conv = conversations[Object.keys(conversations)[i]]
@@ -253,6 +255,7 @@ function useGapi(setGapi, setGoogleAuth, setGClient, setIsLoggedIn, setName, set
           if(threadId == previous) conversations[Object.keys(conversations)[i]][j]['previous'] = j-1;
           previous = threadId;
         }
+        setProgress(100);
       }
       setContacts(Object.keys(conversations))
       setConversations({...conversations});
@@ -544,6 +547,7 @@ function sendMessage(gapi, headers, body) {
 function App() {
   const [value, setValue] = useState(state);
   const [newContact, setNewContact] = useState("");
+  const [progress, setProgress] = useState(0);
   const [chosenMsg, setChosenMsg] = useState(-1);
   const [gapi, setGapi] = useState();
   const [contacts_name, setContacts] = useState([]);
@@ -558,7 +562,7 @@ function App() {
   const [mailTo, setMailTo] = useState([]);
   const [lastUpdate, setlastUpdate] = useState(0);
 
-  const [onSuccess, onFailure, renderSigninButton] = useGapi(setGapi, setGoogleAuth, setGClient, setIsLoggedIn, setName, setEmail, setImageUrl, setContacts, setConversations, setMailTo, setlastUpdate);
+  const [onSuccess, onFailure, renderSigninButton] = useGapi(setGapi, setGoogleAuth, setGClient, setIsLoggedIn, setName, setEmail, setImageUrl, setContacts, setConversations, setMailTo, setlastUpdate, setProgress);
 
 
   useEffect(() => {
@@ -611,7 +615,11 @@ function App() {
     </div>
     <div className="col-md-8 border vh-100 px-0">
       <h3>{contacts_name[state]}</h3>
-      
+      {progress < 100 &&
+      <div class="progress">
+        <div class="progress-bar" role="progressbar" style={{width: progress.toString() + "%"}} aria-valuenow={progress} aria-valuemin="0" aria-valuemax="100"></div>
+      </div>
+      }
       <div className="container-fluid pre-scrollable conversation">
       {Conversation(conversations, contacts_name, isLoggedIn, setChosenMsg)}
       </div>
