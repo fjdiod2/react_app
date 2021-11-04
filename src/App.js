@@ -522,7 +522,7 @@ function Conversation(conversations, contacts_name, isLoggedIn, setChosenMsg) {
  return conv;
 }
 
-function sendMessage(gapi, headers, body) {
+function sendMessage(gapi, headers, body, threadId) {
   let email = "";
 
   const headersClone = { ...headers };
@@ -539,7 +539,8 @@ function sendMessage(gapi, headers, body) {
   return gapi.client.gmail.users.messages.send({
     userId: "me",
     resource: {
-      raw: window.btoa(encodedEmail).replace(/\+/g, "-").replace(/\//g, "_")
+      raw: window.btoa(encodedEmail).replace(/\+/g, "-").replace(/\//g, "_"),
+      threadId: threadId
     }
   });
 };
@@ -646,7 +647,7 @@ function App() {
                   Subject: "Subject"
                 };
               }
-            sendMessage(gapi, headers, message).then((resp) => {console.log('sucsess', resp)}, (reason) => {console.log('ERROR', reason)});
+            sendMessage(gapi, headers, message, conv[contacts_name[state]][chosenMsg].threadId).then((resp) => {console.log('sucsess', resp)}, (reason) => {console.log('ERROR', reason)});
             setMessage("");
             console.log('Sending', headers)
           }}>Send</button>
