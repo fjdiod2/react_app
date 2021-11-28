@@ -215,7 +215,7 @@ function useGapi(setGapi, setGoogleAuth, setGClient, setIsLoggedIn, setName, set
     setImageUrl(profile.getImageUrl());
     // setContacts(['ASDAD', 'CCCCC']);
     // gapi.client.gmail.users.messages.list({userId: "me", q: "after:2021/10/12"}).then((response) => {console.log("ADASDASD")});
-  gapi.client.gmail.users.messages.list({userId: "me", q: "after:" + (Date.parse("2021/10/01 00:00:00")/1000).toString()}).then(
+  gapi.client.gmail.users.messages.list({userId: "me", q: "after:" + (Date.parse("2021/11/26 00:00:00")/1000).toString()}).then(
     async (response) => {
       // await setEmail(profile.getEmail());
       var contacts = [];
@@ -477,8 +477,15 @@ function Message(msg, convers, ref_msg, ref_p, msgNum, setChosenMsg) {
               <div class="row">
                 <div class="col-md-1"></div>
                 <div class="col-md-5 text-truncate border-start"  onClick={() => {ref_p.current.scrollIntoView({ behavior: 'smooth' });}} dangerouslySetInnerHTML={{__html: DOMPurify.sanitize(convers[msg.previous].body)}}></div>
+                <div className="col-md-2">{msg.subject}</div>
               </div>
             }
+               {msg.previous == -1 &&
+               <div className="row">
+               <div class="col-md-1"></div>
+               <div className="col-md-3 border-start">{msg.subject}</div>
+               </div>
+             }
                <div className="row">
                   <div class={msgNum == chosenMsg ? "col-md-8 message bg-primary": "col-md-8 message"} ref={ref_msg} onClick={onMsgClick} dangerouslySetInnerHTML={{__html: DOMPurify.sanitize(msg.body)}}></div>
                   <div className="col-md-2 text-muted time-date">{msg.date_str.substring(5, 5+8)}</div>
@@ -493,8 +500,15 @@ function Message(msg, convers, ref_msg, ref_p, msgNum, setChosenMsg) {
               <div class="row">
                 <div class="col-md-1"></div>
                 <div class="col-md-5 text-truncate border-start" onClick={() => {ref_p.current.scrollIntoView({ behavior: 'smooth' }); console.log("SCROLLING")}}  dangerouslySetInnerHTML={{__html: DOMPurify.sanitize(convers[msg.previous].body)}}></div>
+                <div className="col-md-2">{msg.subject}</div>
               </div>
             }
+               {msg.previous == -1 &&
+               <div className="row">
+               <div class="col-md-1"></div>
+               <div className="col-md-3 border-start">{msg.subject}</div>
+               </div>
+             }
                <div className="row">
                   <div class={msgNum == chosenMsg ? "col-md-8 message bg-primary": "col-md-8 message"} ref={ref_msg} onClick={onMsgClick} dangerouslySetInnerHTML={{__html: DOMPurify.sanitize(msg.body)}}></div>
                   <div className="col-md-2 text-muted time-date">{msg.date_str.substring(5, 5+8)}</div>
@@ -536,6 +550,7 @@ function sendMessage(gapi, headers, body, threadId) {
   email += `\r\n<html><body>${body}</body></html>`;
   const encodedEmail = unescape(encodeURIComponent(email));
 
+  if(threadId != -1) {
   return gapi.client.gmail.users.messages.send({
     userId: "me",
     resource: {
@@ -543,6 +558,14 @@ function sendMessage(gapi, headers, body, threadId) {
       threadId: threadId
     }
   });
+} else {
+  return gapi.client.gmail.users.messages.send({
+    userId: "me",
+    resource: {
+      raw: window.btoa(encodedEmail).replace(/\+/g, "-").replace(/\//g, "_"),
+    }
+  });
+}
 };
 
 function App() {
@@ -560,6 +583,9 @@ function App() {
   const [imageUrl, setImageUrl] = useState();
   const [conversations, setConversations] = useState();
   const [message, setMessage] = useState("");
+  const [subject, setSubject] = useState("Subject");
+  const [addMail, setAddMail] = useState();
+  const [copyMails, setCopyMails] = useState([]);
   const [mailTo, setMailTo] = useState([]);
   const [lastUpdate, setlastUpdate] = useState(0);
 
@@ -625,6 +651,25 @@ function App() {
       {Conversation(conversations, contacts_name, isLoggedIn, setChosenMsg)}
       </div>
       <div class="navbar-fixed-bottom input-form">
+      <div className="input-group">
+      <input placeholder="Add emails" value={addMail} onChange={(event) => {setAddMail(event.target.value); console.log('copies', addMail)}}></input>
+      <button onClick={() => {
+        if(typeof(copyMails) != 'string') {
+          var adds = [...copyMails, addMail];
+          setCopyMails(adds);
+        }
+      }}>+</button>
+      <button onClick={() => {
+        if(copyMails.length == 0) {
+          return
+        }
+        var copies = [...copyMails]
+        copies.pop();
+        setCopyMails(copies);
+      }}>-</button>
+      </div>
+      <div>TO: {[mailTo[state], ...copyMails].join(",")}</div>
+        <input type="subject" class="form-control" id="subject_input" placeholder="Subject" value={subject} onChange={(event) => {setSubject(event.target.value); console.log('Subjecting', subject)}}></input>
         <div class="input-group">
           <textarea class="form-control" id="exampleFormControlTextarea1" rows="3" value={message} onChange={(event) => {setMessage(event.target.value); console.log('Texting', event.target.value)}}></textarea>
           <button onClick={() => {
@@ -634,7 +679,7 @@ function App() {
                  console.log("SENDING WITH CHOSEN");
                  console.log(conv[contacts_name[state]][chosenMsg].subject, conv[contacts_name[state]][chosenMsg].inrepTo, conv[contacts_name[state]][chosenMsg].msgId);
                  headers = {
-                  To: mailTo[state],
+                  To: [mailTo[state], ...copyMails].join(","),
                   Subject: conv[contacts_name[state]][chosenMsg].subject,
                   "In-Reply-To": conv[contacts_name[state]][chosenMsg].msgId,
                   References: conv[contacts_name[state]][chosenMsg].msgId,
@@ -643,11 +688,12 @@ function App() {
                 console.log(headers);
               } else {
                  headers = {
-                  To: mailTo[state],
-                  Subject: "Subject"
+                  To: [mailTo[state], ...copyMails].join(","),
+                  Subject: subject
                 };
               }
-            sendMessage(gapi, headers, message, conv[contacts_name[state]][chosenMsg].threadId).then((resp) => {console.log('sucsess', resp)}, (reason) => {console.log('ERROR', reason)});
+            if(chosenMsg != -1) sendMessage(gapi, headers, message, conv[contacts_name[state]][chosenMsg].threadId).then((resp) => {console.log('sucsess', resp)}, (reason) => {console.log('ERROR', reason)});
+            if(chosenMsg == -1) sendMessage(gapi, headers, message, -1).then((resp) => {console.log('sucsess', resp)}, (reason) => {console.log('ERROR', reason)});
             setMessage("");
             console.log('Sending', headers)
           }}>Send</button>
